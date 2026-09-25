@@ -229,6 +229,13 @@ export class PipelineService implements OnModuleInit {
       return true;
     }
 
+    if (esResult.results.length !== rows.length) {
+      await this.redis.setCircuit(true, 'bulk result length mismatch');
+      await this.redis.incrCounter('es_transport_errors');
+      this.log.warn(`ES bulk length mismatch batch=${batchId} results=${esResult.results.length} rows=${rows.length}`);
+      return true;
+    }
+
     // Per-item: successes stay; failures → DLQ; cursor advances.
     for (const item of esResult.results) {
       if (!item.ok) {

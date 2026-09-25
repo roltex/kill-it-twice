@@ -128,6 +128,12 @@ export class ElasticsearchSink implements OnModuleInit {
       const res = await this.client.bulk({ refresh: false, operations });
       const results: BulkItemResult[] = [];
       const items = res.items ?? [];
+      if (items.length !== rows.length) {
+        return {
+          results: [],
+          transportError: `incomplete bulk response: got ${items.length} items for ${rows.length} docs`,
+        };
+      }
       for (let i = 0; i < items.length; i++) {
         const item = items[i].index ?? items[i].update;
         const row = rows[i];

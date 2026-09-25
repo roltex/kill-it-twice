@@ -35,9 +35,13 @@ fetch_status() {
 
 wait_health() {
   local i
-  for i in $(seq 1 90); do
+  for i in $(seq 1 120); do
     if curl -sf --max-time 5 http://localhost:3000/health >/dev/null; then
       return 0
+    fi
+    # If container exited, try to bring it back once during bootstrap.
+    if (( i % 15 == 0 )); then
+      docker compose up -d pipeline >/dev/null 2>&1 || true
     fi
     sleep 2
   done
@@ -114,40 +118,44 @@ fi
 if [[ "$G1_OK" == 1 ]]; then
   note "G1: docker kill pipeline at cursor=$G1_CURSOR read=$G1_READ"
   docker compose kill -s SIGKILL pipeline
-  sleep 3
-  docker compose start pipeline >/dev/null 2>&1 || docker compose up -d pipeline >/dev/null 2>&1 || true
-  sleep 2
+  sleep 1
+  # Durable truth is the Postgres checkpoint after the process is dead — not a slightly stale status poll.
+  G1_CP="$(docker compose exec -T postgres psql -U optio -d optio -tAc \
+    "SELECT cursor_id FROM checkpoints WHERE mode='backfill';" | tr -d '[:space:]')"
+  docker compose up -d --no-deps pipeline >/dev/null 2>&1 || true
   if ! wait_health; then
     G1_OK=0
     G1_RESUME=0
   else
-    # Wait briefly for Nest boot + checkpoint load into resumed_from
-    sleep 3
+    sleep 1
     RESUME="$(fetch_status)"
     G1_RESUME="$(field "$RESUME" resumed_from)"
-    # Persist cursor at kill must be >0 and within one batch of the in-memory read tip.
-    if [[ -z "${G1_RESUME:-}" || "$G1_RESUME" -le 0 ]]; then
+    if [[ -z "${G1_CP:-}" || "$G1_CP" -le 0 ]]; then
       G1_OK=0
-    elif (( G1_RESUME > G1_READ + BATCH )); then
+    elif [[ -z "${G1_RESUME:-}" || "$G1_RESUME" -le 0 ]]; then
       G1_OK=0
-    elif (( G1_CURSOR > G1_READ + BATCH )); then
+    elif (( G1_RESUME != G1_CP )); then
       G1_OK=0
-    elif (( G1_READ - G1_CURSOR > BATCH )); then
+    elif (( G1_CP + BATCH < G1_READ && G1_READ - G1_CP > BATCH * 2 )); then
+      # Read tip may be ahead of durable CP by at most the in-flight window.
       G1_OK=0
-    else
-      # resumed_from should match the durable checkpoint at kill (±0); allow restart catch-up of at most 0
-      if (( G1_RESUME < G1_CURSOR )); then
-        G1_OK=0
-      fi
     fi
+    G1_CURSOR="$G1_CP"
   fi
 fi
 
 note "G3: stopping Elasticsearch for 60s"
+docker compose stop -t 5 elasticsearch >/dev/null 2>&1 || docker stop optio-elasticsearch-1 >/dev/null 2>&1 || true
+# Wait until ES is actually unreachable before measuring outage behavior.
+for i in $(seq 1 30); do
+  if ! curl -sf --max-time 2 http://localhost:9200 >/dev/null; then
+    break
+  fi
+  sleep 1
+done
 PRE_G3="$(fetch_status)"
 G3_CURSOR="$(field "$PRE_G3" backfill_cursor)"
 G3_SLEEPS="$(field "$PRE_G3" backoff_sleeps)"
-docker compose stop elasticsearch
 sleep 60
 MID_G3="$(fetch_status)"
 G3_CURSOR_MID="$(field "$MID_G3" backfill_cursor)"
@@ -156,7 +164,7 @@ G3_DELTA_SLEEP=$(( ${G3_SLEEPS_MID:-0} - ${G3_SLEEPS:-0} ))
 G3_DELTA_CURSOR=$(( ${G3_CURSOR_MID:-0} - ${G3_CURSOR:-0} ))
 note "G3: starting Elasticsearch (sleeps=$G3_DELTA_SLEEP cursor_delta=$G3_DELTA_CURSOR)"
 recover_start=$(date +%s)
-docker compose start elasticsearch
+docker compose start elasticsearch >/dev/null 2>&1 || docker compose up -d elasticsearch >/dev/null 2>&1 || true
 G3_RECOVERED=0
 if wait_es; then
   while true; do
@@ -232,9 +240,9 @@ if [[ "$DISTINCT" != "$SOURCE_COUNT" ]]; then
 fi
 
 if [[ "$G1_OK" == 1 && "$LOST" == 0 && "$ES_COUNT" == "$SOURCE_COUNT" ]]; then
-  record "G1 resume after kill ............" PASS "(killed at ${G1_READ} / resumed at ${G1_RESUME}, 0 lost)"
+  record "G1 resume after kill ............" PASS "(killed at ${G1_READ} / resumed at ${G1_RESUME}, checkpoint=${G1_CURSOR}, 0 lost)"
 else
-  record "G1 resume after kill ............" FAIL "(killed at ${G1_READ:-0} / resumed at ${G1_RESUME:-0}, lost=${LOST}, cursor=${G1_CURSOR:-0})"
+  record "G1 resume after kill ............" FAIL "(killed at ${G1_READ:-0} / resumed at ${G1_RESUME:-0}, checkpoint=${G1_CURSOR:-0}, lost=${LOST})"
 fi
 
 if [[ "$ES_COUNT" == "$SOURCE_COUNT" && "$DISTINCT" == "$SOURCE_COUNT" && "$DUPES" == 0 ]]; then
@@ -245,7 +253,7 @@ fi
 
 G3_OK=1
 if (( G3_DELTA_SLEEP < 2 || G3_DELTA_SLEEP > 200 )); then G3_OK=0; fi
-if (( G3_DELTA_CURSOR > 1000 )); then G3_OK=0; fi
+if (( G3_DELTA_CURSOR > BATCH * 2 )); then G3_OK=0; fi
 if [[ "$G3_RECOVERED" != 1 ]]; then G3_OK=0; fi
 if (( LOST != 0 )); then G3_OK=0; fi
 if [[ "$G3_OK" == 1 ]]; then

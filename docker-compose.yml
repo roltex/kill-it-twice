@@ -82,7 +82,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    restart: unless-stopped
+    restart: "no"
 
   consumer:
     build:
@@ -98,7 +98,7 @@ services:
         condition: service_healthy
       pipeline:
         condition: service_started
-    restart: unless-stopped
+    restart: "no"
 
   ui:
     build:
