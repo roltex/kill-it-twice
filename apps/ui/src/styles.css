@@ -1,0 +1,38 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  background: #0f1419;
+  color: #e7ecf1;
+}
+body { margin: 0; }
+.shell {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  padding: 0.75rem 1.25rem;
+  background: #1a2332;
+  border-bottom: 1px solid #2c3a4d;
+}
+.shell nav { display: flex; gap: 1rem; }
+.shell a { color: #8ec8ff; text-decoration: none; }
+.observability { margin: 0; color: #9aa8b8; font-size: 0.85rem; }
+main { padding: 1.25rem; max-width: 1100px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem; }
+.card { background: #1a2332; border: 1px solid #2c3a4d; border-radius: 8px; padding: 0.9rem; }
+.card h2 { margin: 0 0 0.35rem; font-size: 0.8rem; color: #9aa8b8; font-weight: 600; }
+.card p { margin: 0; font-size: 1.4rem; }
+.ok { color: #3dd68c; }
+.bad { color: #ff6b6b; }
+table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+th, td { text-align: left; padding: 0.45rem 0.5rem; border-bottom: 1px solid #2c3a4d; font-size: 0.9rem; }
+button, input {
+  background: #243044;
+  color: #e7ecf1;
+  border: 1px solid #3d516b;
+  border-radius: 6px;
+  padding: 0.45rem 0.7rem;
+  margin: 0.25rem 0.25rem 0.25rem 0;
+}
+button { cursor: pointer; }
+.row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin: 0.75rem 0; }
+pre { white-space: pre-wrap; background: #1a2332; padding: 0.75rem; border-radius: 8px; }

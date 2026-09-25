@@ -11,3 +11,7 @@ coverage/
 tmp/
 data/
 *.pid
+poison.json
+apps/*/node_modules/
+apps/*/dist/
+apps/*/.angular/
