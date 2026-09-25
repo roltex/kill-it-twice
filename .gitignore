@@ -12,6 +12,9 @@ tmp/
 data/
 *.pid
 poison.json
+*.tsbuildinfo
+task.cursor
+verify-run.log
 apps/*/node_modules/
 apps/*/dist/
 apps/*/.angular/

@@ -1,6 +1,6 @@
 # Kill It Twice
 
-Postgres → Elasticsearch + RabbitMQ replication with concurrent **backfill** and **incremental** sync. Built for Optio’s Senior SWE take-home: the graders kill containers and inject poison rows; `make verify` has to prove the five gates.
+Postgres → Elasticsearch + RabbitMQ replication with concurrent **backfill** and **incremental** sync. The design focus is failure behavior: crash recovery, sink outages, partial batch failure, and observability you can read without opening the code.
 
 **Delivery guarantee: effectively-once** (at-least-once pipeline + idempotent sinks). Not exactly-once.
 
