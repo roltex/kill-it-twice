@@ -185,17 +185,26 @@ export class ElasticsearchSink implements OnModuleInit {
   }
 
   async search(q: string, limit = 50) {
+    const trimmed = (q ?? '').trim();
+    let query: Record<string, unknown> = { match_all: {} };
+    if (trimmed) {
+      if (/^\d+$/.test(trimmed)) {
+        query = { term: { id: Number(trimmed) } };
+      } else {
+        query = {
+          multi_match: {
+            query: trimmed,
+            fields: ['email', 'name', 'name.keyword'],
+            type: 'best_fields',
+            lenient: true,
+          },
+        };
+      }
+    }
     const res = await this.client.search({
       index: this.indexName,
       size: limit,
-      query: q
-        ? {
-            multi_match: {
-              query: q,
-              fields: ['email', 'name', 'id'],
-            },
-          }
-        : { match_all: {} },
+      query,
       sort: [{ id: 'desc' }],
     });
     return res.hits.hits.map((h) => h._source);
